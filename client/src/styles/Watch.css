@@ -1,0 +1,149 @@
+/* src/styles/Watch.css */
+.watch-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 20px;
+  gap: 20px;
+}
+
+.filter-section {
+  background: #1e1e2f;
+  border-radius: 10px;
+  padding: 15px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.filter-section h2 {
+  margin-top: 0;
+  color: #fff;
+  margin-bottom: 15px;
+}
+
+.search-bar input {
+  width: 100%;
+  padding: 10px 15px;
+  border-radius: 6px;
+  border: 1px solid #3a3a5c;
+  background: #2c2c44;
+  color: #fff;
+  font-size: 16px;
+  margin-bottom: 15px;
+}
+
+.country-filter {
+  display: flex;
+  gap: 15px;
+  margin-bottom: 15px;
+}
+
+.country-filter select {
+  flex: 1;
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid #3a3a5c;
+  background: #2c2c44;
+  color: #fff;
+  font-size: 16px;
+}
+
+.reset-filters {
+  padding: 10px 15px;
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.reset-filters:hover {
+  background: #c0392b;
+}
+
+.results-count {
+  font-size: 14px;
+  color: #ccc;
+}
+
+.content-area {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.channels-and-player {
+  display: flex;
+  width: 100%;
+  gap: 20px;
+  height: calc(100vh - 200px);
+}
+
+.channels-section {
+  flex: 0 0 300px;
+  overflow-y: auto;
+  background: #1e1e2f;
+  border-radius: 10px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.player-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #1e1e2f;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.channel-info {
+  padding: 15px;
+  border-bottom: 1px solid #2c2c44;
+}
+
+.channel-info h3 {
+  margin: 0 0 10px 0;
+  color: #fff;
+}
+
+.country, .category {
+  display: inline-block;
+  background: #3a3a5c;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 12px;
+  margin-right: 8px;
+  color: #fff;
+}
+
+.loading-message, .no-selection-message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  color: #ccc;
+  font-size: 18px;
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .channels-and-player {
+    flex-direction: column;
+    height: auto;
+  }
+
+  .channels-section, .player-section {
+    flex: none;
+    width: 100%;
+  }
+  
+  .channels-section {
+    height: 300px;
+  }
+  
+  .player-section {
+    height: calc(100vh - 500px);
+  }
+}
