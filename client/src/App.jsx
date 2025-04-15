@@ -4,15 +4,18 @@ import {
   Routes, 
   Route, 
   useLocation, 
-  useParams,
-  useNavigate 
+  useParams
 } from 'react-router-dom';
 import { IptvProvider } from './context/IptvContext';
+import { AuthProvider } from './context/AuthContext'; // Import the AuthProvider
 import Home from './pages/Home';
 import Settings from './pages/Settings';
 import Watch from './pages/Watch';
 import Navigation from './components/Navigation';
-import ErrorBoundary from './components/ErrorBoundary';
+import AuthForm from './pages/Register';
+import Login from './pages/Login';
+import ProtectedRoute from './components/ProtectedRoute';
+import Profile from './pages/Profile'; // New profile page component
 
 // Composant wrapper pour forcer le remontage complet à chaque navigation
 function LocationAwareRoute({ Component }) {
@@ -34,21 +37,62 @@ function WatchWithRemount() {
 
 function App() {
   return (
-    <ErrorBoundary>
-      <IptvProvider>
-        <BrowserRouter>
-          <div className="app">
-            <Navigation />
-            <Routes>
-              <Route index element={<LocationAwareRoute Component={Home} />} />
-              <Route path="watch" element={<WatchWithRemount />} />
-              <Route path="watch/:streamId" element={<WatchWithRemount />} />
-              <Route path="settings" element={<LocationAwareRoute Component={Settings} />} />
-            </Routes>
-          </div>
-        </BrowserRouter>
-      </IptvProvider>
-    </ErrorBoundary>
+      <AuthProvider> {/* Wrap everything in AuthProvider to provide auth context */}
+        <IptvProvider>
+          <BrowserRouter>
+            <div className="app">
+              <Navigation />
+              <Routes>
+                {/* Public routes: Login & Register */}
+                <Route path="login" element={<LocationAwareRoute Component={Login} />} />
+                <Route path="register" element={<LocationAwareRoute Component={AuthForm} />} />
+                
+                {/* Protected routes */}
+                <Route
+                  index
+                  element={
+                    <ProtectedRoute>
+                      <LocationAwareRoute Component={Home} />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="watch"
+                  element={
+                    <ProtectedRoute>
+                      <WatchWithRemount />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="watch/:streamId"
+                  element={
+                    <ProtectedRoute>
+                      <WatchWithRemount />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="settings"
+                  element={
+                    <ProtectedRoute>
+                      <LocationAwareRoute Component={Settings} />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="profile"
+                  element={
+                    <ProtectedRoute>
+                      <LocationAwareRoute Component={Profile} />
+                    </ProtectedRoute>
+                  }
+                />
+              </Routes>
+            </div>
+          </BrowserRouter>
+        </IptvProvider>
+      </AuthProvider>
   );
 }
 
