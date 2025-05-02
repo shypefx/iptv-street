@@ -1,10 +1,45 @@
 // src/pages/Watch.jsx
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useIptv } from '../context/IptvContext';
 import VideoPlayer from '../components/VideoPlayer';
-import { IoArrowBack, IoSearchOutline, IoFilterOutline } from 'react-icons/io5';
+import { IoArrowBack, IoSearchOutline, IoFilterOutline, IoChevronDown } from 'react-icons/io5';
 import { RiLiveLine } from 'react-icons/ri';
+import '../styles/Watch.css';
+
+// Helper function to handle last viewed channels locally
+const updateLastViewedChannelsLocally = (channel) => {
+  try {
+    // Get existing last viewed channels from localStorage
+    const lastViewedJSON = localStorage.getItem('lastViewedChannels');
+    let lastViewed = lastViewedJSON ? JSON.parse(lastViewedJSON) : [];
+    
+    // Remove the channel if it already exists in the array
+    lastViewed = lastViewed.filter(ch => 
+      (ch.stream_id !== channel.stream_id) && (ch.id !== channel.id)
+    );
+    
+    // Add the channel to the beginning of the array
+    lastViewed.unshift({
+      id: channel.id || channel.stream_id,
+      stream_id: channel.stream_id || channel.id,
+      name: channel.name,
+      category_id: channel.category_id,
+      timestamp: new Date().getTime()
+    });
+    
+    // Keep only the last 10 items
+    lastViewed = lastViewed.slice(0, 10);
+    
+    // Store back to localStorage
+    localStorage.setItem('lastViewedChannels', JSON.stringify(lastViewed));
+    
+    return lastViewed;
+  } catch (error) {
+    console.error("Error updating last viewed channels:", error);
+    return [];
+  }
+};
 
 export default function Watch() {
   const { streamId } = useParams();
@@ -14,7 +49,6 @@ export default function Watch() {
     categories, 
     loading, 
     getChannelById,
-    updateLastViewedChannels,
     countries = [],
     channelTypes = [],
     qualities = [],
@@ -31,557 +65,411 @@ export default function Watch() {
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [currentCategory, setCurrentCategory] = useState('all');
+  const [pageNumber, setPageNumber] = useState(1);
+  const [lastViewedChannels, setLastViewedChannels] = useState([]);
+  const channelsPerPage = 20;
+  const channelListRef = useRef(null);
+  const searchInputRef = useRef(null);
   
+  // Focus search input when filters are shown
+  useEffect(() => {
+    if (showFilters && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [showFilters]);
+  
+  // Load initial last viewed channels
+  useEffect(() => {
+    try {
+      const lastViewedJSON = localStorage.getItem('lastViewedChannels');
+      if (lastViewedJSON) {
+        const lastViewed = JSON.parse(lastViewedJSON);
+        setLastViewedChannels(lastViewed);
+      }
+    } catch (error) {
+      console.error("Error loading last viewed channels:", error);
+    }
+  }, []);
+  
+  // Load channel from the ID in URL
   const loadChannel = useCallback(() => {
-    if (!streamId) return;
+    if (!streamId || !channels.length) return;
 
+    console.log(`Loading channel with ID: ${streamId}`);
+    
     try {
       const channel = getChannelById(streamId);
       
       if (channel) {
-        console.log(`[Watch] Chaîne trouvée: "${channel.name}" (ID: ${streamId})`);
+        console.log(`Channel found: "${channel.name}"`);
         setCurrentChannel(channel);
-        updateLastViewedChannels(channel);
+        
+        // Update last viewed channels locally instead of using context
+        const updated = updateLastViewedChannelsLocally(channel);
+        setLastViewedChannels(updated);
+        
+        // Set current category if available
+        if (channel.category_id) {
+          setCurrentCategory(channel.category_id.toString());
+        }
       } else {
-        console.error(`[Watch] Chaîne avec ID ${streamId} non trouvée`);
-        //setError(`Chaîne non trouvée (ID: ${streamId})`);
+        console.error(`Channel with ID ${streamId} not found`);
       }
     } catch (err) {
-      console.error("[Watch] Erreur lors de la récupération de la chaîne:", err);
-      //setError(`Erreur: ${err.message}`);
-    } finally {
-      //setLoading(false);
+      console.error("Error retrieving channel:", err);
     }
-  }, [streamId, getChannelById, updateLastViewedChannels]);
-  // Récupérer la chaîne actuelle
+  }, [streamId, channels.length, getChannelById]);
+
+  // Load channel when component mounts or streamId changes
   useEffect(() => {
-    console.log(`[Watch] Paramètre streamId changé: ${streamId}`);
-    loadChannel(streamId);
-    if (streamId && channels.length > 0) {
-      console.log(`Recherche de la chaîne avec ID: ${streamId}`);
-      const channel = getChannelById(streamId);
-      if (channel) {
-        console.log("Chaîne trouvée:", channel);
-        setCurrentChannel(channel);
-        updateLastViewedChannels(channel);
-      } else {
-        console.error(`Chaîne avec ID ${streamId} non trouvée dans ${channels.length} chaînes`);
-      }
-    }
     loadChannel();
-  }, [streamId, channels, getChannelById, updateLastViewedChannels, loadChannel, ]);
+    // Reset to page 1 when filter/search criteria change
+    setPageNumber(1);
+  }, [loadChannel, searchTerm, selectedCountry, selectedType, selectedQuality, currentCategory]);
   
-  // Filtrer les chaînes
+  // Filter channels based on search and filters
   const filteredChannels = channels
     .filter(channel => {
-      // Filtre par recherche
+      // Filter by category
+      if (currentCategory !== 'all' && channel.category_id?.toString() !== currentCategory) {
+        return false;
+      }
+      
+      // Filter by search term
       if (searchTerm && !channel.name?.toLowerCase().includes(searchTerm.toLowerCase())) {
         return false;
       }
       
-      // Filtres par pays, type et qualité
-      if (selectedCountry !== 'all' && channel.country !== selectedCountry) {
+      // Filter by country, type and quality
+      if (selectedCountry && selectedCountry !== 'all' && channel.country !== selectedCountry) {
         return false;
       }
-      if (selectedType !== 'all' && channel.channelType !== selectedType) {
+      if (selectedType && selectedType !== 'all' && channel.channel_type !== selectedType) {
         return false;
       }
-      if (selectedQuality !== 'all' && channel.quality !== selectedQuality) {
+      if (selectedQuality && selectedQuality !== 'all' && channel.quality !== selectedQuality) {
         return false;
       }
       
       return true;
-    })
-    .slice(0, 100); // Limiter pour les performances
+    });
   
-  // Fonction pour changer de chaîne
+  // Paginate channels
+  const totalPages = Math.ceil(filteredChannels.length / channelsPerPage);
+  const paginatedChannels = filteredChannels.slice(
+    (pageNumber - 1) * channelsPerPage,
+    pageNumber * channelsPerPage
+  );
+  
+  // Function to change channel
   const changeChannel = (channel) => {
-    if (channel && (channel.id || channel.stream_id)) {
-      const channelId = channel.id || channel.stream_id;
+    if (!channel) {
+      console.error("Attempted to change to a null channel");
+      return;
+    }
+    
+    // Get a valid ID
+    const channelId = channel.stream_id || channel.id || channel.num;
+    
+    if (channelId) {
+      console.log(`Navigating to channel with ID: ${channelId}`);
       navigate(`/watch/${channelId}`);
+    } else {
+      console.error("Invalid channel without ID:", channel);
     }
   };
-
-
+  
+  // Handle pagination
+  const handleNextPage = () => {
+    if (pageNumber < totalPages) {
+      setPageNumber(current => current + 1);
+      // Scroll back to top of channel list
+      if (channelListRef.current) {
+        channelListRef.current.scrollTop = 0;
+      }
+    }
+  };
+  
+  const handlePrevPage = () => {
+    if (pageNumber > 1) {
+      setPageNumber(current => current - 1);
+      // Scroll back to top of channel list
+      if (channelListRef.current) {
+        channelListRef.current.scrollTop = 0;
+      }
+    }
+  };
+  
+  // Toggle sidebar
   const toggleSidebar = () => {
     setSidebarVisible(!sidebarVisible);
   };
-
+  
   return (
-    <div style={{ 
-      display: 'flex', 
-      height: 'calc(100vh - 60px)', 
-      background: '#0f0f0f',
-      color: '#f0f0f0',
-      position: 'relative'
-    }}>
-      {/* Bouton pour afficher/masquer la barre latérale (visible uniquement quand la barre est cachée) */}
-      {!sidebarVisible && (
-        <button
-          onClick={toggleSidebar}
-          style={{
-            position: 'absolute',
-            top: '10px',
-            left: '10px',
-            zIndex: 100,
-            background: 'rgba(0,0,0,0.7)',
-            border: 'none',
-            borderRadius: '50%',
-            width: '40px',
-            height: '40px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            color: 'white'
-          }}
-        >
-          <IoFilterOutline size={20} />
+    <div className="watch-container">
+      {/* Video Player */}
+      <div className={`player-container ${!sidebarVisible ? 'fullscreen' : ''}`}>
+        {currentChannel ? (
+          <VideoPlayer channel={currentChannel} />
+        ) : (
+          <div className="player-placeholder">
+            {loading ? 'Chargement...' : 'Sélectionnez une chaîne pour commencer'}
+          </div>
+        )}
+        
+        {/* Channel info overlay */}
+        {currentChannel && (
+          <div className="channel-info-overlay">
+            <h2>{currentChannel.name}</h2>
+            <div className="channel-meta">
+              {currentChannel.quality && (
+                <span className="quality-tag">{currentChannel.quality}</span>
+              )}
+              {currentChannel.channel_type && (
+                <span className="type-tag">{currentChannel.channel_type}</span>
+              )}
+              <RiLiveLine className="live-icon" />
+            </div>
+          </div>
+        )}
+        
+        {/* Toggle sidebar button */}
+        <button className="toggle-sidebar-btn" onClick={toggleSidebar}>
+          {sidebarVisible ? '>' : '<'}
         </button>
-      )}
+      </div>
       
       {/* Sidebar */}
       {sidebarVisible && (
-        <div style={{ 
-          width: '320px', 
-          overflowY: 'auto', 
-          borderRight: '1px solid #333',
-          background: '#1a1a1a',
-          display: 'flex',
-          flexDirection: 'column'
-        }}>
-          <div style={{ padding: '15px', borderBottom: '1px solid #333' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
-              <button 
-                onClick={() => navigate('/')}
-                style={{ 
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '5px',
-                  padding: '8px 12px',
-                  background: '#333',
-                  border: 'none',
-                  borderRadius: '4px',
-                  color: '#fff'
-                }}
-              >
-                <IoArrowBack /> Retour
-              </button>
-              
-              <button 
-                onClick={toggleSidebar}
-                style={{ 
-                  cursor: 'pointer',
-                  padding: '8px 12px',
-                  background: '#333',
-                  border: 'none',
-                  borderRadius: '4px',
-                  color: '#fff'
-                }}
-              >
-                Masquer
-              </button>
-            </div>
-            
-            {/* Barre de recherche */}
-            <div style={{ position: 'relative', marginBottom: '15px' }}>
-              <input 
-                type="text" 
-                placeholder="Rechercher une chaîne..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ 
-                  width: '100%', 
-                  padding: '10px 10px 10px 35px',
-                  background: '#2a2a2a',
-                  border: '1px solid #444',
-                  borderRadius: '4px',
-                  color: '#fff',
-                  boxSizing: 'border-box'
-                }}
-              />
-              <IoSearchOutline style={{ 
-                position: 'absolute', 
-                left: '10px', 
-                top: '50%', 
-                transform: 'translateY(-50%)',
-                color: '#aaa'
-              }} />
-            </div>
-            
-            {/* Bouton pour afficher/masquer les filtres */}
-            <button 
-              onClick={() => setShowFilters(!showFilters)}
-              style={{ 
-                width: '100%',
-                padding: '8px 12px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                background: '#2a2a2a',
-                border: 'none',
-                borderRadius: '4px',
-                color: '#fff',
-                cursor: 'pointer',
-                marginBottom: '10px'
-              }}
-            >
-              <span><IoFilterOutline style={{ marginRight: '5px' }} /> Filtres</span>
-              <span>{showFilters ? '▲' : '▼'}</span>
+        <div className="sidebar">
+          <div className="sidebar-header">
+            <button className="back-button" onClick={() => navigate('/')}>
+              <IoArrowBack /> Retour
             </button>
             
-            {/* Filtres avancés */}
-            {showFilters && (
-              <div style={{ 
-                marginBottom: '15px', 
-                padding: '10px', 
-                background: '#242424', 
-                borderRadius: '5px' 
-              }}>
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'flex-end',
-                  marginBottom: '10px'
-                }}>
+            <div className="search-filter-container">
+              <div className="search-container">
+                <IoSearchOutline className="search-icon" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Rechercher..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="search-input"
+                />
+                {searchTerm && (
                   <button 
-                    onClick={resetFilters}
-                    style={{ 
-                      padding: '5px 8px',
-                      background: 'transparent',
-                      border: '1px solid #555',
-                      borderRadius: '3px',
-                      color: '#ccc',
-                      fontSize: '12px',
-                      cursor: 'pointer'
-                    }}
+                    className="clear-search"
+                    onClick={() => setSearchTerm('')}
                   >
-                    Réinitialiser
+                    ×
                   </button>
-                </div>
-                
-                {/* Sélecteur de pays */}
-                {countries.length > 0 && (
-                  <div style={{ marginBottom: '10px' }}>
-                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>
-                      Pays:
-                    </label>
+                )}
+              </div>
+              
+              <button 
+                className={`filter-button ${showFilters ? 'active' : ''}`}
+                onClick={() => setShowFilters(!showFilters)}
+              >
+                <IoFilterOutline /> Filtres
+              </button>
+            </div>
+            
+            {showFilters && (
+              <div className="filters-panel">
+                {/* Country filter */}
+                {countries && countries.length > 0 && (
+                  <div className="filter-group">
+                    <label>Pays:</label>
                     <select 
-                      value={selectedCountry}
-                      onChange={(e) => setSelectedCountry(e.target.value)}
-                      style={{ 
-                        width: '100%',
-                        padding: '8px',
-                        background: '#333',
-                        border: '1px solid #555',
-                        borderRadius: '3px',
-                        color: '#fff'
+                      value={selectedCountry || 'all'} 
+                      onChange={(e) => {
+                        if (typeof setSelectedCountry === 'function') {
+                          setSelectedCountry(e.target.value);
+                        }
                       }}
                     >
                       <option value="all">Tous les pays</option>
-                      {countries.map((country, idx) => (
-                        <option key={idx} value={country}>{country}</option>
+                      {countries.map(country => (
+                        <option key={country} value={country}>{country}</option>
                       ))}
                     </select>
                   </div>
                 )}
                 
-                {/* Sélecteur de type */}
-                {channelTypes.length > 0 && (
-                  <div style={{ marginBottom: '10px' }}>
-                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>
-                      Type:
-                    </label>
+                {/* Channel type filter */}
+                {channelTypes && channelTypes.length > 0 && (
+                  <div className="filter-group">
+                    <label>Type:</label>
                     <select 
-                      value={selectedType}
-                      onChange={(e) => setSelectedType(e.target.value)}
-                      style={{ 
-                        width: '100%',
-                        padding: '8px',
-                        background: '#333',
-                        border: '1px solid #555',
-                        borderRadius: '3px',
-                        color: '#fff'
+                      value={selectedType || 'all'} 
+                      onChange={(e) => {
+                        if (typeof setSelectedType === 'function') {
+                          setSelectedType(e.target.value);
+                        }
                       }}
                     >
                       <option value="all">Tous les types</option>
-                      {channelTypes.map((type, idx) => (
-                        <option key={idx} value={type}>{type}</option>
+                      {channelTypes.map(type => (
+                        <option key={type} value={type}>{type}</option>
                       ))}
                     </select>
                   </div>
                 )}
                 
-                {/* Sélecteur de qualité */}
-                {qualities.length > 0 && (
-                  <div>
-                    <label style={{ display: 'block', marginBottom: '5px', fontSize: '14px' }}>
-                      Qualité:
-                    </label>
+                {/* Quality filter */}
+                {qualities && qualities.length > 0 && (
+                  <div className="filter-group">
+                    <label>Qualité:</label>
                     <select 
-                      value={selectedQuality}
-                      onChange={(e) => setSelectedQuality(e.target.value)}
-                      style={{ 
-                        width: '100%',
-                        padding: '8px',
-                        background: '#333',
-                        border: '1px solid #555',
-                        borderRadius: '3px',
-                        color: '#fff'
+                      value={selectedQuality || 'all'} 
+                      onChange={(e) => {
+                        if (typeof setSelectedQuality === 'function') {
+                          setSelectedQuality(e.target.value);
+                        }
                       }}
                     >
                       <option value="all">Toutes les qualités</option>
-                      {qualities.map((quality, idx) => (
-                        <option key={idx} value={quality}>{quality}</option>
+                      {qualities.map(quality => (
+                        <option key={quality} value={quality}>{quality}</option>
                       ))}
                     </select>
                   </div>
+                )}
+                
+                {typeof resetFilters === 'function' && (
+                  <button 
+                    className="reset-filters-btn" 
+                    onClick={() => {
+                      resetFilters();
+                      setSearchTerm('');
+                      setCurrentCategory('all');
+                    }}
+                  >
+                    Réinitialiser les filtres
+                  </button>
                 )}
               </div>
             )}
             
-            {/* Statistiques */}
-            <div style={{ 
-              fontSize: '14px',
-              color: '#aaa', 
-              display: 'flex',
-              justifyContent: 'space-between'
-            }}>
-              <span>Total: {channels.length} chaînes</span>
-              <span>Filtré: {filteredChannels.length}</span>
+            {/* Recently viewed channels */}
+            {lastViewedChannels.length > 0 && (
+              <div className="recently-viewed-section">
+                <h3>Récemment vus</h3>
+                <div className="recently-viewed-list">
+                  {lastViewedChannels.slice(0, 5).map(channel => (
+                    <button
+                      key={`recent-${channel.stream_id || channel.id}`}
+                      className="recently-viewed-item"
+                      onClick={() => changeChannel(channel)}
+                    >
+                      {channel.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            
+            {/* Categories tabs */}
+            <div className="categories-tabs">
+              <button 
+                className={`category-tab ${currentCategory === 'all' ? 'active' : ''}`}
+                onClick={() => setCurrentCategory('all')}
+              >
+                Tout
+              </button>
+              {categories && categories.slice(0, 8).map(category => (
+                <button 
+                  key={category.category_id} 
+                  className={`category-tab ${currentCategory === category.category_id.toString() ? 'active' : ''}`}
+                  onClick={() => setCurrentCategory(category.category_id.toString())}
+                >
+                  {category.category_name}
+                </button>
+              ))}
+              {categories && categories.length > 8 && (
+                <div className="categories-dropdown">
+                  <button className="categories-more-btn">
+                    Plus <IoChevronDown />
+                  </button>
+                  <div className="categories-dropdown-content">
+                    {categories.slice(8).map(category => (
+                      <button 
+                        key={category.category_id} 
+                        className={`category-item ${currentCategory === category.category_id.toString() ? 'active' : ''}`}
+                        onClick={() => setCurrentCategory(category.category_id.toString())}
+                      >
+                        {category.category_name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           
-          {/* Liste des chaînes */}
-          <div style={{ flex: 1, overflowY: 'auto' }}>
-            {loading ? (
-              <div style={{ padding: '20px', textAlign: 'center' }}>
-                <div style={{ 
-                  display: 'inline-block',
-                  width: '30px',
-                  height: '30px',
-                  border: '3px solid rgba(255,255,255,0.3)',
-                  borderRadius: '50%',
-                  borderTopColor: '#fff',
-                  animation: 'spin 1s linear infinite',
-                  marginBottom: '10px'
-                }} />
-                <div>Chargement des chaînes...</div>
-                <style>{`
-                  @keyframes spin {
-                    to { transform: rotate(360deg); }
-                  }
-                `}</style>
-              </div>
-            ) : filteredChannels.length === 0 ? (
-              <div style={{ padding: '20px', textAlign: 'center', color: '#aaa' }}>
-                <p>Aucune chaîne ne correspond aux critères.</p>
+          {/* Channel list */}
+          <div className="channel-list-container">
+            <div className="channels-count">
+              {filteredChannels.length} chaînes trouvées
+            </div>
+            
+            <div className="channel-list" ref={channelListRef}>
+              {loading ? (
+                <div className="loading-channels">
+                  <div className="loading-spinner"></div>
+                  Chargement des chaînes...
+                </div>
+              ) : paginatedChannels.length > 0 ? (
+                paginatedChannels.map(channel => (
+                  <div 
+                    key={channel.stream_id || channel.id || channel.num}
+                    className={`channel-item ${currentChannel && (currentChannel.stream_id === channel.stream_id || currentChannel.id === channel.id) ? 'active' : ''}`}
+                    onClick={() => changeChannel(channel)}
+                  >
+                    <div className="channel-info">
+                      <div className="channel-number">{channel.num || channel.stream_id || channel.id}</div>
+                      <div className="channel-name">{channel.name}</div>
+                    </div>
+                    {channel.quality && (
+                      <div className="channel-quality">{channel.quality}</div>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="no-channels-found">
+                  Aucune chaîne trouvée
+                </div>
+              )}
+            </div>
+            
+            {/* Pagination */}
+            {filteredChannels.length > channelsPerPage && (
+              <div className="pagination-controls">
                 <button 
-                  onClick={resetFilters}
-                  style={{ 
-                    padding: '8px 15px',
-                    background: '#333',
-                    border: 'none',
-                    borderRadius: '4px',
-                    color: '#fff',
-                    cursor: 'pointer'
-                  }}
+                  className="pagination-btn" 
+                  onClick={handlePrevPage}
+                  disabled={pageNumber <= 1}
                 >
-                  Réinitialiser les filtres
+                  Précédent
+                </button>
+                <div className="pagination-info">
+                  Page {pageNumber} sur {totalPages}
+                </div>
+                <button 
+                  className="pagination-btn" 
+                  onClick={handleNextPage}
+                  disabled={pageNumber >= totalPages}
+                >
+                  Suivant
                 </button>
               </div>
-            ) : (
-              filteredChannels.map((channel) => (
-                <div 
-                  key={`channel-${channel.id || channel.stream_id}`} 
-                  style={{
-                    padding: '12px 15px',
-                    borderBottom: '1px solid #2a2a2a',
-                    cursor: 'pointer',
-                    background: currentChannel && 
-                      (currentChannel.id === channel.id || 
-                       currentChannel.stream_id === channel.stream_id) 
-                      ? '#2c3e50' : 'transparent',
-                    transition: 'background-color 0.2s'
-                  }}
-                  onClick={() => changeChannel(channel)}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    {channel.logoURL || channel.stream_icon ? (
-                      <img 
-                        src={channel.logoURL || channel.stream_icon} 
-                        alt={channel.name} 
-                        style={{ width: '40px', height: '40px', marginRight: '12px', objectFit: 'contain' }}
-                        onError={(e) => {e.target.style.display = 'none'}}
-                      />
-                    ) : (
-                      <div style={{ 
-                        width: '40px', 
-                        height: '40px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        backgroundColor: '#444',
-                        borderRadius: '4px',
-                        marginRight: '12px',
-                        fontSize: '14px'
-                      }}>
-                        {channel.name?.substring(0, 2) || 'CH'}
-                      </div>
-                    )}
-                    <div style={{ flex: 1 }}>
-                      <div style={{ 
-                        fontWeight: '500',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        maxWidth: '220px'
-                      }}>
-                        {channel.name}
-                      </div>
-                      <div style={{ 
-                        fontSize: '0.8rem', 
-                        color: '#aaa', 
-                        display: 'flex',
-                        gap: '8px',
-                        marginTop: '3px'
-                      }}>
-                        <span>{channel.category || channel.category_name || 'Autre'}</span>
-                        {channel.quality && (
-                          <span style={{
-                            background: '#333',
-                            padding: '0 5px',
-                            borderRadius: '3px',
-                            fontSize: '11px'
-                          }}>
-                            {channel.quality}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))
             )}
           </div>
         </div>
       )}
-      
-      {/* Zone principale - Lecteur vidéo */}
-      <div style={{ 
-        flex: 1, 
-        background: '#000',
-        display: 'flex',
-        flexDirection: 'column',
-      }}>
-        {currentChannel ? (
-          <>
-            <div style={{ 
-              padding: '15px', 
-              background: 'rgba(0,0,0,0.8)',
-              borderBottom: '1px solid #333'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h2 style={{ margin: '0 0 5px 0', fontSize: '20px' }}>{currentChannel.name}</h2>
-                
-                {!sidebarVisible && (
-                  <button 
-                    onClick={toggleSidebar}
-                    style={{ 
-                      cursor: 'pointer',
-                      padding: '6px 12px',
-                      background: '#333',
-                      border: 'none',
-                      borderRadius: '4px',
-                      color: '#fff'
-                    }}
-                  >
-                    Liste des chaînes
-                  </button>
-                )}
-              </div>
-              
-              <div style={{ 
-                display: 'flex', 
-                gap: '10px', 
-                fontSize: '14px',
-                color: '#bbb'
-              }}>
-                <span>{currentChannel.category || currentChannel.category_name || 'Aucune catégorie'}</span>
-                {currentChannel.quality && (
-                  <span style={{
-                    background: '#333',
-                    padding: '0 8px',
-                    borderRadius: '3px',
-                    fontSize: '12px'
-                  }}>
-                    {currentChannel.quality}
-                  </span>
-                )}
-                {currentChannel.country && currentChannel.country !== 'Inconnu' && (
-                  <span>{currentChannel.country}</span>
-                )}
-              </div>
-            </div>
-            
-            <div style={{ flex: 1, position: 'relative' }}>
-              <VideoPlayer 
-                channel={currentChannel}
-                style={{ width: '100%', height: '100%' }}
-              />
-            </div>
-          </>
-        ) : (
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            height: '100%',
-            flexDirection: 'column',
-            color: '#ccc'
-          }}>
-            <RiLiveLine style={{ fontSize: '64px', marginBottom: '20px', opacity: '0.5' }} />
-            <h2 style={{ marginBottom: '10px' }}>Sélectionnez une chaîne</h2>
-            <p>Choisissez une chaîne dans la liste pour commencer à regarder</p>
-            
-            {!sidebarVisible && (
-              <button 
-                onClick={toggleSidebar}
-                style={{ 
-                  marginTop: '20px',
-                  padding: '10px 20px',
-                  background: '#333',
-                  border: 'none', 
-                  borderRadius: '4px',
-                  color: '#fff',
-                  cursor: 'pointer'
-                }}
-              >
-                Afficher la liste
-              </button>
-            )}
-            
-            {channels.length > 0 && (
-              <button
-                onClick={() => changeChannel(channels[0])}
-                style={{
-                  marginTop: '20px',
-                  padding: '10px 20px',
-                  background: '#2962ff',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer',
-                  fontSize: '16px'
-                }}
-              >
-                Regarder la première chaîne
-              </button>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 }

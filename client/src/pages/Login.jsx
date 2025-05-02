@@ -2,6 +2,7 @@
 import { useState, useContext } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
+import { useIptv } from '../context/IptvContext';
 import '../styles/Auth.css'; // Make sure to create this CSS file
 
 const Login = () => {
@@ -10,6 +11,7 @@ const Login = () => {
   const [formError, setFormError] = useState('');
   const { login, error, loading } = useContext(AuthContext);
   const navigate = useNavigate();
+  const { loadChannels, lastUpdated, refreshChannels } = useIptv();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -36,6 +38,19 @@ const Login = () => {
         {(error || formError) && (
           <div className="auth-error">
             {formError || error}
+          </div>
+        )}
+
+        {lastUpdated && (
+          <div className="cached-info">
+            <p>Last updated: {lastUpdated}</p>
+            <button 
+              onClick={refreshChannels} 
+              disabled={loading}
+              className="refresh-button"
+            >
+              {loading ? 'Loading...' : 'Refresh Data'}
+            </button>
           </div>
         )}
         

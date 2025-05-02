@@ -3,14 +3,16 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useIptv } from '../context/IptvContext.jsx';
 import { AuthContext } from '../context/AuthContext'; // Import the AuthContext
 import '../styles/Navigation.css';
+
 // Vous pouvez importer des icônes si nécessaire, par exemple de react-icons
 // import { AiOutlineHome, AiOutlinePlayCircle, AiOutlineSetting, AiOutlineMenu, AiOutlineUser, AiOutlineLogout } from 'react-icons/ai';
 
 export default function Navigation() {
-  const { loading } = useIptv();
   const { currentUser, logout } = useContext(AuthContext); // Get auth context data
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
+  const { lastUpdated, refreshChannels, loading } = useIptv();
+
 
   const toggleMobileMenu = () => {
     setMobileMenuOpen(!mobileMenuOpen);
@@ -41,6 +43,23 @@ export default function Navigation() {
           {/* <AiOutlineMenu /> */}
           ☰
         </button>
+
+        <div className="cache-status">
+          {lastUpdated ? (
+            <>
+              <span>Data updated: {lastUpdated}</span>
+              <button 
+                onClick={refreshChannels} 
+                disabled={loading}
+                className="small-button"
+              >
+                {loading ? 'Loading...' : 'Refresh'}
+              </button>
+            </>
+          ) : (
+            <span>No cached data available</span>
+          )}
+        </div>
 
         {/* Liens de navigation */}
         <div className={`nav-links ${mobileMenuOpen ? 'mobile-active' : ''}`}>

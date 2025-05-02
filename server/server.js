@@ -8,8 +8,11 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 require('dotenv').config();
-
 const app = express();
+
+// Increase JSON payload limit to 50MB
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Middleware
 app.use(cors());
@@ -26,10 +29,47 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   playlists: [{ type: String }], // Array of playlist URLs
+  isAdmin: { type: Boolean, default: false }, // Add this line
   createdAt: { type: Date, default: Date.now }
 });
 
 const User = mongoose.model('User', userSchema);
+
+
+const channelSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true,
+    ref: 'User'
+  },
+  serverUrl: {
+    type: String,
+    required: true
+  },
+  username: {
+    type: String,
+    required: true
+  },
+  channels: {
+    type: Array,
+    default: []
+  },
+  categories: {
+    type: Array,
+    default: []
+  },
+  lastUpdated: {
+    type: Date,
+    default: Date.now
+  },
+  isFrenchOnly: {
+    type: Boolean,
+    default: true
+  }
+});
+
+const Channel = mongoose.model('Channel', channelSchema);
+
 
 // Middleware for logging requests
 app.use((req, res, next) => {
@@ -287,6 +327,186 @@ app.use('/api/iptv-proxy', (req, res, next) => {
 app.get('/api/test', (req, res) => {
   res.json({ message: 'Proxy server is running correctly!' });
 });
+
+app.post('/api/iptv/channels', authenticateToken, async (req, res) => {
+  try {
+    const { serverUrl, username, channels, categories } = req.body;
+    
+    if (!serverUrl || !username || !channels || !Array.isArray(channels)) {
+      return res.status(400).json({ message: 'Invalid request data' });
+    }
+    
+    // Find existing channel document or create new one
+    let channelDoc = await Channel.findOne({ 
+      userId: req.user.id,
+      serverUrl,
+      username
+    });
+    
+    if (channelDoc) {
+      // Update existing document
+      channelDoc.channels = channels;
+      channelDoc.categories = categories || [];
+      channelDoc.lastUpdated = new Date();
+      await channelDoc.save();
+    } else {
+      // Create new document
+      channelDoc = new Channel({
+        userId: req.user.id,
+        serverUrl,
+        username,
+        channels,
+        categories: categories || [],
+        lastUpdated: new Date()
+      });
+      await channelDoc.save();
+    }
+    
+    res.json({ 
+      message: 'Channels saved successfully',
+      lastUpdated: channelDoc.lastUpdated,
+      channelCount: channels.length
+    });
+  } catch (error) {
+    console.error('Save IPTV channels error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get IPTV channels from database
+app.get('/api/iptv/channels', authenticateToken, async (req, res) => {
+  try {
+    const { serverUrl, username } = req.query;
+    
+    if (!serverUrl || !username) {
+      return res.status(400).json({ message: 'Server URL and username are required' });
+    }
+    
+    const channelDoc = await Channel.findOne({ 
+      userId: req.user.id,
+      serverUrl,
+      username
+    });
+    
+    if (!channelDoc) {
+      return res.status(404).json({ message: 'No channels found for this configuration' });
+    }
+    
+    // Check if data is too old (more than 24 hours)
+    const lastUpdated = new Date(channelDoc.lastUpdated);
+    const now = new Date();
+    const ageInHours = (now - lastUpdated) / (1000 * 60 * 60);
+    
+    res.json({
+      channels: channelDoc.channels,
+      categories: channelDoc.categories,
+      lastUpdated: channelDoc.lastUpdated,
+      needsRefresh: ageInHours > 24, // Recommend refresh if older than 24h
+      channelCount: channelDoc.channels.length
+    });
+  } catch (error) {
+    console.error('Get IPTV channels error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Check if channels exist for a specific configuration
+app.get('/api/iptv/channels/check', authenticateToken, async (req, res) => {
+  try {
+    const { serverUrl, username } = req.query;
+    
+    if (!serverUrl || !username) {
+      return res.status(400).json({ message: 'Server URL and username are required' });
+    }
+    
+    const channelDoc = await Channel.findOne({ 
+      userId: req.user.id,
+      serverUrl,
+      username
+    });
+    
+    if (!channelDoc) {
+      return res.json({ exists: false });
+    }
+    
+    const lastUpdated = new Date(channelDoc.lastUpdated);
+    const now = new Date();
+    const ageInHours = (now - lastUpdated) / (1000 * 60 * 60);
+    
+    res.json({
+      exists: true,
+      lastUpdated: channelDoc.lastUpdated,
+      channelCount: channelDoc.channels.length,
+      needsRefresh: ageInHours > 24
+    });
+  } catch (error) {
+    console.error('Check IPTV channels error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Delete channel cache
+app.delete('/api/iptv/channels', authenticateToken, async (req, res) => {
+  try {
+    const { serverUrl, username } = req.body;
+    
+    if (!serverUrl || !username) {
+      return res.status(400).json({ message: 'Server URL and username are required' });
+    }
+    
+    const result = await Channel.deleteOne({ 
+      userId: req.user.id,
+      serverUrl,
+      username
+    });
+    
+    if (result.deletedCount === 0) {
+      return res.status(404).json({ message: 'No channels found for this configuration' });
+    }
+    
+    res.json({ message: 'Channel cache deleted successfully' });
+  } catch (error) {
+    console.error('Delete IPTV channels error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Mark user as an admin
+app.post('/api/user/admin', authenticateToken, async (req, res) => {
+  try {
+    const { targetUserId, isAdmin } = req.body;
+    
+    // Check if current user is already an admin (you might want to add this field to your User schema)
+    const currentUser = await User.findById(req.user.id);
+    if (!currentUser || !currentUser.isAdmin) {
+      return res.status(403).json({ message: 'Permission denied' });
+    }
+    
+    // Update target user
+    const user = await User.findByIdAndUpdate(
+      targetUserId, 
+      { isAdmin: Boolean(isAdmin) }, 
+      { new: true }
+    );
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    res.json({ 
+      message: `User ${isAdmin ? 'promoted to' : 'demoted from'} admin successfully`,
+      user: {
+        id: user._id,
+        username: user.username,
+        isAdmin: user.isAdmin
+      }
+    });
+  } catch (error) {
+    console.error('Admin status update error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 
 // In production, serve the React/Vue.js app
 if (process.env.NODE_ENV === 'production') {

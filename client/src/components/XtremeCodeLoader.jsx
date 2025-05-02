@@ -1,10 +1,10 @@
-// src/components/XtremeCodeLoader.jsx - Version mise à jour
+// src/components/XtremeCodeLoader.jsx
 import React, { useState, useEffect } from 'react';
-import { useIptv } from '../context/IPTVContext';
+import { useIptv } from '../context/IptvContext';
 import '../styles/XtremeCodeLoader.css';
 
 const XtremeCodeLoader = ({ onSuccess }) => {
-  // Obtenir les fonctions et états nécessaires du contexte IPTV
+  // Get the needed functions and states from IPTV context
   const { 
     channels, 
     loading, 
@@ -12,22 +12,23 @@ const XtremeCodeLoader = ({ onSuccess }) => {
     isAuthenticated, 
     login, 
     logout, 
-    handleClearCache 
+    handleClearCache,
+    lastUpdated
   } = useIptv();
   
-  // États locaux pour le formulaire
+  // Local form state
   const [formData, setFormData] = useState({
     serverUrl: '',
     username: '',
     password: ''
   });
 
-  // État local pour gérer les messages d'erreur/succès spécifiques au formulaire
+  // Local states for form-specific error/success messages
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Récupérer les informations d'authentification sauvegardées
+  // Load saved auth info
   useEffect(() => {
     const savedAuth = localStorage.getItem('iptv_auth');
     if (savedAuth) {
@@ -35,12 +36,12 @@ const XtremeCodeLoader = ({ onSuccess }) => {
         const { serverUrl, username, password } = JSON.parse(savedAuth);
         setFormData({ serverUrl, username, password });
       } catch (e) {
-        console.error("Erreur lors de la récupération des informations d'authentification:", e);
+        console.error("Error loading saved auth info:", e);
       }
     }
   }, []);
 
-  // Gestion des changements dans le formulaire
+  // Handle form changes
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -49,7 +50,7 @@ const XtremeCodeLoader = ({ onSuccess }) => {
     }));
   };
   
-  // Soumission du formulaire
+  // Form submission handler
   const handleSubmit = async (e) => {
     e.preventDefault();
     setFormError('');
@@ -57,26 +58,30 @@ const XtremeCodeLoader = ({ onSuccess }) => {
     setIsSubmitting(true);
 
     try {
-      // Vérification des champs vides
+      // Validate form fields
       if (!formData.serverUrl || !formData.username || !formData.password) {
-        setFormError('Tous les champs sont obligatoires');
+        setFormError('All fields are required');
+        setIsSubmitting(false);
         return;
       }
 
-      // Appel à la fonction de connexion du contexte
-      await login(formData.serverUrl, formData.username, formData.password);
+      // Call login function from context
+      const success = await login(formData.serverUrl, formData.username, formData.password);
       
-      // Sauvegarder les informations d'authentification
-      localStorage.setItem('iptv_auth', JSON.stringify(formData));
-      
-      setFormSuccess('Connexion réussie!');
-      
-      // Appeler la fonction de callback en cas de succès
-      if (onSuccess && typeof onSuccess === 'function') {
-        onSuccess();
+      if (success) {
+        // Save auth info
+        localStorage.setItem('iptv_auth', JSON.stringify(formData));
+        setFormSuccess('Login successful! Loading French channels only.');
+        
+        // Call success callback if provided
+        if (onSuccess && typeof onSuccess === 'function') {
+          onSuccess();
+        }
+      } else {
+        setFormError('Login failed. Please check your credentials.');
       }
     } catch (err) {
-      setFormError(err.message || "Erreur de connexion. Vérifiez vos informations et réessayez.");
+      setFormError(err.message || "Connection error. Please check your information and try again.");
     } finally {
       setIsSubmitting(false);
     }
@@ -84,26 +89,29 @@ const XtremeCodeLoader = ({ onSuccess }) => {
 
   return (
     <div className="xtreme-code-container">
-      {/* Barre d'en-tête avec formulaire de connexion */}
+      {/* Header with login form */}
       <div className="xtreme-header">
         {isAuthenticated ? (
           <div className="header-connected">
             <div className="header-info">
-              <h3 className="header-title">IPTV Player ({channels.length} chaînes)</h3>
-              <div className="header-subtitle">{formData.serverUrl} - {formData.username}</div>
+              <h3 className="header-title">French IPTV Player ({channels.length} channels)</h3>
+              <div className="header-subtitle">
+                {formData.serverUrl} - {formData.username}
+                {lastUpdated && ` - Last updated: ${lastUpdated}`}
+              </div>
             </div>
             <div className="header-actions">
               <button 
                 onClick={handleClearCache} 
                 className="clear-cache-button"
               >
-                Vider le cache
+                Clear Cache
               </button>
               <button 
                 onClick={logout} 
                 className="logout-button"
               >
-                Se déconnecter
+                Logout
               </button>
             </div>
           </div>
@@ -114,7 +122,7 @@ const XtremeCodeLoader = ({ onSuccess }) => {
               name="serverUrl"
               value={formData.serverUrl}
               onChange={handleChange}
-              placeholder="URL du serveur"
+              placeholder="Server URL"
               required
               className="form-input"
               disabled={isSubmitting}
@@ -124,7 +132,7 @@ const XtremeCodeLoader = ({ onSuccess }) => {
               name="username"
               value={formData.username}
               onChange={handleChange}
-              placeholder="Nom d'utilisateur"
+              placeholder="Username"
               required
               className="form-input"
               disabled={isSubmitting}
@@ -134,7 +142,7 @@ const XtremeCodeLoader = ({ onSuccess }) => {
               name="password"
               value={formData.password}
               onChange={handleChange}
-              placeholder="Mot de passe"
+              placeholder="Password"
               required
               className="form-input"
               disabled={isSubmitting}
@@ -144,7 +152,7 @@ const XtremeCodeLoader = ({ onSuccess }) => {
               disabled={isSubmitting || loading} 
               className={`form-button ${isSubmitting || loading ? 'button-disabled' : ''}`}
             >
-              {isSubmitting || loading ? 'Connexion...' : 'Connecter'}
+              {isSubmitting || loading ? 'Connecting...' : 'Connect (French Channels Only)'}
             </button>
           </form>
         )}
@@ -162,13 +170,11 @@ const XtremeCodeLoader = ({ onSuccess }) => {
         )}
       </div>
       
-      {/* Suppression des parties VirtualizedChannelList et VideoPlayer */}
-      {/* car ces fonctionnalités ont été déplacées vers la page d'accueil */}
-      
-      {/* Overlay de chargement */}
+      {/* Loading overlay */}
       {(loading || isSubmitting) && (
         <div className="loading-overlay">
           <div className="loading-spinner"></div>
+          <p className="loading-text">Loading French channels only...</p>
         </div>
       )}
     </div>

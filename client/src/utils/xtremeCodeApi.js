@@ -1,20 +1,23 @@
 // src/utils/xtremeCodeApi.js
 import axios from 'axios';
-// Importer le service IndexedDB
+// Import the IndexedDB service
 import { saveChannels, checkValidCache, clearIdbCache } from './indexedDbService';
 
-// Durée de validité du cache (60 minutes en ms)
+// Cache validity duration (60 minutes in ms)
 const CACHE_VALIDITY = 60 * 60 * 1000;
 
-// Cette fonction est encore utile pour maintenir la compatibilité
+// France category IDs
+export const FRANCE_CATEGORY_IDS = ['74', '73', '76', '77', '80', '83', '430'];
+
+// This function is still useful for maintaining compatibility
 export function clearCache() {
-  // Vider le localStorage par précaution
+  // Clear localStorage as a precaution
   localStorage.removeItem('xtreme_channels');
   localStorage.removeItem('xtreme_server_info');
   localStorage.removeItem('xtreme_last_update');
   localStorage.removeItem('xtreme_credentials');
   
-  // Vider IndexedDB
+  // Clear IndexedDB
   clearIdbCache().catch(error => console.error('Error clearing IndexedDB:', error));
   
   console.log('Cache cleared');
@@ -38,26 +41,28 @@ export const authenticateXtreme = async (serverUrl, username, password) => {
   }
 };
 
-export async function getXtremeLiveStreams(serverUrl, username, password) {
+// Get only French channels
+export async function getXtremeFrenchChannels(serverUrl, username, password) {
   try {
     if (!serverUrl || !username || !password) {
       throw new Error('Server URL, username and password are required');
     }
     
-    // Vérifier si nous avons des données en cache valides dans IndexedDB
-    const cachedData = await checkValidCache(serverUrl, username, password, CACHE_VALIDITY);
+    // Check if we have valid cached data in IndexedDB specifically for French channels
+    const cacheKey = `french_${serverUrl}_${username}`;
+    const cachedData = await checkValidCache(cacheKey, username, password, CACHE_VALIDITY);
     if (cachedData && cachedData.length > 0) {
-      console.log('Using cached data from IndexedDB');
+      console.log('Using cached French channels data from IndexedDB');
       return cachedData;
     }
     
-    // Si pas de cache valide, charger les données depuis l'API
-    console.log('No valid cache found, loading from API...');
+    // If no valid cache, load data from the API
+    console.log('No valid French channels cache, loading from API...');
     
-    // Formater l'URL du serveur
+    // Format the server URL
     const apiUrl = formatServerUrl(serverUrl);
     
-    // Récupérer les informations d'authentification
+    // Get authentication information
     const authResponse = await axios.get(`${apiUrl}/player_api.php`, {
       params: {
         username,
@@ -65,12 +70,117 @@ export async function getXtremeLiveStreams(serverUrl, username, password) {
       }
     });
     
-    // Vérifier si l'authentification a réussi
+    // Check if authentication succeeded
     if (!authResponse.data || authResponse.data.user_info?.auth === 0) {
       throw new Error('Authentication failed. Please check your credentials.');
     }
     
-    // Récupérer les catégories
+    // Get categories
+    const categoriesResponse = await axios.get(`${apiUrl}/player_api.php`, {
+      params: {
+        username,
+        password,
+        action: 'get_live_categories'
+      }
+    });
+    
+    const allCategories = categoriesResponse.data;
+    
+    // Filter French categories
+    const frenchCategories = allCategories.filter(cat => 
+      FRANCE_CATEGORY_IDS.includes(cat.category_id.toString())
+    );
+    
+    console.log(`Found ${frenchCategories.length} French categories out of ${allCategories.length} total`);
+    
+    // Get streams for French categories only
+    const channels = [];
+    
+    for (const category of frenchCategories) {
+      console.log(`Fetching streams for French category: ${category.category_name} (ID: ${category.category_id})`);
+      
+      const streamsResponse = await axios.get(`${apiUrl}/player_api.php`, {
+        params: {
+          username,
+          password,
+          action: 'get_live_streams',
+          category_id: category.category_id
+        }
+      });
+      
+      const streams = streamsResponse.data;
+      
+      // Transform the data
+      const transformedStreams = streams.map(stream => ({
+        id: stream.stream_id,
+        name: stream.name,
+        streamURL: `${apiUrl}/live/${username}/${password}/${stream.stream_id}.ts`,
+        logoURL: stream.stream_icon || '',
+        epgChannelId: stream.epg_channel_id || '',
+        category: category.category_name,
+        categoryId: category.category_id,
+        source: 'xtream'
+      }));
+      
+      channels.push(...transformedStreams);
+      console.log(`Added ${transformedStreams.length} streams from French category ${category.category_name}`);
+    }
+    
+    // Save data to IndexedDB with a special key for French channels
+    try {
+      await saveChannels(channels, cacheKey, username, password);
+      console.log(`Successfully saved ${channels.length} French channels to IndexedDB`);
+    } catch (error) {
+      console.error('Failed to save French channels to IndexedDB:', error);
+    }
+    
+    console.log(`Successfully loaded ${channels.length} French channels total`);
+    return channels;
+  } catch (error) {
+    console.error('Error getting French live streams:', error);
+    throw error;
+  }
+}
+
+// Original function maintained for compatibility
+export async function getXtremeLiveStreams(serverUrl, username, password, frenchOnly = false) {
+  // If French only is requested, use the specialized function
+  if (frenchOnly) {
+    return getXtremeFrenchChannels(serverUrl, username, password);
+  }
+  
+  try {
+    if (!serverUrl || !username || !password) {
+      throw new Error('Server URL, username and password are required');
+    }
+    
+    // Check if we have valid cached data in IndexedDB
+    const cachedData = await checkValidCache(serverUrl, username, password, CACHE_VALIDITY);
+    if (cachedData && cachedData.length > 0) {
+      console.log('Using cached data from IndexedDB');
+      return cachedData;
+    }
+    
+    // If no valid cache, load data from the API
+    console.log('No valid cache found, loading from API...');
+    
+    // Format the server URL
+    const apiUrl = formatServerUrl(serverUrl);
+    
+    // Get authentication information
+    const authResponse = await axios.get(`${apiUrl}/player_api.php`, {
+      params: {
+        username,
+        password
+      }
+    });
+    
+    // Check if authentication succeeded
+    if (!authResponse.data || authResponse.data.user_info?.auth === 0) {
+      throw new Error('Authentication failed. Please check your credentials.');
+    }
+    
+    // Get categories
     const categoriesResponse = await axios.get(`${apiUrl}/player_api.php`, {
       params: {
         username,
@@ -82,7 +192,7 @@ export async function getXtremeLiveStreams(serverUrl, username, password) {
     const categories = categoriesResponse.data;
     console.log(`Found ${categories.length} categories, fetching streams...`);
     
-    // Récupérer tous les streams
+    // Get all streams
     const channels = [];
     
     for (const category of categories) {
@@ -99,7 +209,7 @@ export async function getXtremeLiveStreams(serverUrl, username, password) {
       
       const streams = streamsResponse.data;
       
-      // Transformer les données
+      // Transform the data
       const transformedStreams = streams.map(stream => ({
         id: stream.stream_id,
         name: stream.name,
@@ -115,7 +225,7 @@ export async function getXtremeLiveStreams(serverUrl, username, password) {
       console.log(`Added ${transformedStreams.length} streams from category ${category.category_name}`);
     }
     
-    // Sauvegarder les données dans IndexedDB
+    // Save data to IndexedDB
     try {
       await saveChannels(channels, serverUrl, username, password);
       console.log(`Successfully saved ${channels.length} channels to IndexedDB`);
