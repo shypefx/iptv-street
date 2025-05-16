@@ -25,7 +25,7 @@ export const AuthProvider = ({ children }) => {
       const config = {
         headers: { Authorization: `Bearer ${token}` }
       };
-      const response = await axios.get('http://100.100.56.60:5173/api/user/profile', config);
+      const response = await axios.get('http://100.100.56.60:5001/api/user/profile', config);
       setCurrentUser(response.data);
     } catch (error) {
       localStorage.removeItem('token');
@@ -39,7 +39,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (username, password) => {
     try {
       setLoading(true);
-      const response = await axios.post('http://100.100.56.60:5173/api/auth/login', { username, password });
+      const response = await axios.post('http://100.100.56.60:5001/api/auth/login', { username, password });
       localStorage.setItem('token', response.data.token);
       setCurrentUser(response.data.user);
       setError(null);
@@ -56,7 +56,7 @@ export const AuthProvider = ({ children }) => {
   const register = async (username, email, password) => {
     try {
       setLoading(true);
-      const response = await axios.post('http://100.100.56.60:5173/api/auth/register', { 
+      const response = await axios.post('http://100.100.56.60:5001/api/auth/register', { 
         username, email, password 
       });
       localStorage.setItem('token', response.data.token);
@@ -84,7 +84,7 @@ export const AuthProvider = ({ children }) => {
       const config = {
         headers: { Authorization: `Bearer ${token}` }
       };
-      const response = await axios.post('http://100.100.56.60:5173/api/user/playlists', { playlistUrl }, config);
+      const response = await axios.post('http://100.100.56.60:5001/api/user/playlists', { playlistUrl }, config);
       return response.data;
     } catch (error) {
       setError(error.response?.data?.message || 'Failed to save playlist');
@@ -99,7 +99,7 @@ export const AuthProvider = ({ children }) => {
       const config = {
         headers: { Authorization: `Bearer ${token}` }
       };
-      const response = await axios.get('http://100.100.56.60:5173/api/user/playlists', config);
+      const response = await axios.get('http://100.100.56.60:5001/api/user/playlists', config);
       return response.data.playlists;
     } catch (error) {
       setError(error.response?.data?.message || 'Failed to get playlists');
@@ -114,7 +114,7 @@ export const AuthProvider = ({ children }) => {
       const config = {
         headers: { Authorization: `Bearer ${token}` }
       };
-      const response = await axios.delete('http://100.100.56.60:5173/api/user/playlists', { 
+      const response = await axios.delete('http://100.100.56.60:5001/api/user/playlists', { 
         headers: config.headers,
         data: { playlistUrl }
       });
