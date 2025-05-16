@@ -519,8 +519,7 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Proxy server running on port ${PORT}`);
-  console.log(`Access your app at http://localhost:${PORT}`);
-  console.log(`Test the proxy at http://localhost:${PORT}/api/test`);
 });
+
