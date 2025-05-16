@@ -1,0 +1,147 @@
+/* src/components/ChannelLoadingProgress.css */
+.channel-loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: #fff;
+  padding: 1rem;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.loading-spinner-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  border-top-color: #3a85ff;
+  animation: spin 1s ease-in-out infinite;
+  margin-bottom: 15px;
+}
+
+.connecting-text {
+  font-size: 18px;
+  font-weight: 500;
+  margin: 0;
+  color: #fff;
+}
+
+.channel-loader-status {
+  width: 100%;
+  height: 10px;
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 15px;
+}
+
+.channel-loader-progress {
+  height: 100%;
+  background-color: #4CAF50;
+  border-radius: 5px;
+}
+
+.channel-loader-count {
+  font-size: 14px;
+  color: #bbb;
+  margin: 5px 0 15px;
+  text-align: center;
+}
+
+.channel-loading-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  background-color: rgba(0, 0, 0, 0.2);
+  border-radius: 8px;
+  padding: 10px;
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #555 #222;
+}
+
+.channel-loading-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.channel-loading-list::-webkit-scrollbar-track {
+  background: #222;
+  border-radius: 3px;
+}
+
+.channel-loading-list::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 3px;
+}
+
+.channel-loading-item {
+  display: flex;
+  align-items: center;
+  padding: 5px 0;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.channel-loading-icon {
+  color: #4CAF50;
+  font-weight: bold;
+  margin-right: 10px;
+}
+
+.channel-loading-name {
+  color: #4CAF50;
+  font-size: 14px;
+}
+
+.current-loading-channel {
+  display: flex;
+  align-items: center;
+  padding: 5px 0;
+  margin-top: 5px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.loading-dot-animation {
+  color: #ffcc00;
+  margin-right: 10px;
+  position: relative;
+}
+
+.loading-dot-animation::after {
+  content: '...';
+  position: absolute;
+  overflow: hidden;
+  display: inline-block;
+  vertical-align: bottom;
+  animation: dots 2s infinite;
+  color: #ffcc00;
+}
+
+.current-channel-name {
+  color: #4CAF50;
+  font-size: 14px;
+  font-style: italic;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes dots {
+  0% { width: 0; }
+  33% { width: 0.25em; }
+  66% { width: 0.5em; }
+  100% { width: 0.75em; }
+}
